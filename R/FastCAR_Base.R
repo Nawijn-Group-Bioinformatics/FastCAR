@@ -146,7 +146,7 @@ plot.ambient.profile = function(ambientProfile){
 
 # I noticed that the number of genes removed tends to even out over time
 # Test whether the point where this first happens is a good empty cutoff point
-recommendedRemoval = function(ambientProfile){
+recommend.empty.cutoff = function(ambientProfile){
   highestNumberOfGenes = max(ambientProfile[,3])
   firstOccurence = match(highestNumberOfGenes, ambientProfile[,3])
   return(as.numeric(rownames(ambientProfile[firstOccurence,])))
