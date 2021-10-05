@@ -51,7 +51,6 @@ determine.background.to.remove = function(fullCellMatrix, cellMatrix, emptyDropl
   # determines the highest expression value found for every gene in the droplets that we're sure don't contain cells
   backGroundMax   = as.vector(rowMax(fullCellMatrix[,Matrix::colSums(fullCellMatrix) < emptyDropletCutoff]))
   names(backGroundMax) = rownames(fullCellMatrix)
-  nCell = ncol(cellMatrix)
 
   # droplets that are empty but not unused barcodes, unused barcodes have zero reads assigned to them.
   nEmpty = table((Matrix::colSums(fullCellMatrix) < emptyDropletCutoff) &(Matrix::colSums(fullCellMatrix) > 0))[2]
