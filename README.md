@@ -8,7 +8,7 @@ FastCAR is an R package to remove ambient RNA from cells in droplet based single
 FastCAR can be installed from git with the following command.
 
 ```
-devtools::install_git("https://git.web.rug.nl/P278949/FastCAR")
+devtools::install_git("https://github.com/Nawijn-Group-Bioinformatics/FastCAR")
 ```
 
 Running FastCAR is quite simple.
