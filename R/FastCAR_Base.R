@@ -13,6 +13,8 @@
 library(Matrix)
 library(Seurat)
 library(qlcMatrix)
+library(pheatmap)
+library(ggplot2)
 
 ###############################################################################
 
@@ -46,10 +48,10 @@ remove.background = function(geneCellMatrix, ambientRNAprofile){
 }
 ##############
 
-determine.background.to.remove = function(fullCellMatrix, cellMatrix, emptyDropletCutoff, contaminationChanceCutoff){
+determine.background.to.remove = function(fullCellMatrix, emptyDropletCutoff, contaminationChanceCutoff){
 
   # determines the highest expression value found for every gene in the droplets that we're sure don't contain cells
-  backGroundMax   = as.vector(rowMax(fullCellMatrix[,Matrix::colSums(fullCellMatrix) < emptyDropletCutoff]))
+  backGroundMax   = as.vector(qlcMatrix::rowMax(fullCellMatrix[,Matrix::colSums(fullCellMatrix) < emptyDropletCutoff]))
   names(backGroundMax) = rownames(fullCellMatrix)
 
   # droplets that are empty but not unused barcodes, unused barcodes have zero reads assigned to them.
@@ -78,6 +80,93 @@ read.full.matrix = function(fullFolderLocation){
   fullMatrix = Read10X(fullFolderLocation)
   return(fullMatrix)
 }
+
+###############################################################################
+getExpressionThreshold = function(gene, expMat, percentile){
+  orderedExpression = expMat[gene, order(expMat[gene,], decreasing = TRUE)]
+  CS = cumsum(orderedExpression)
+  return(orderedExpression[which(CS/max(CS) > percentile)[1]])
+}
+
+###############################################################################
+celltypeSpecificityScore = function(gene, expMat){
+  CS = cumsum(expMat[gene, order(expMat[gene,], decreasing = TRUE)])
+  return((sum(CS/max(CS))/ncol(expMat))  )
+}
+
+###############################################################################
+describe.correction.effect = function (allExpression, cellExpression, startPos, stopPos, byLength, contaminationChanceCutoff){
+
+  # Make somewhere to store all the data that needs to be returned to the user
+  ambientScoreProfileOverview = data.frame(row.names = rownames(cellExpression))
+
+  # do a quick first run to see which genes get corrected at the highest setting
+  ambientProfile = determine.background.to.remove(allExpression, cellExpression, stopPos, contaminationChanceCutoff)
+  genelist = names(ambientProfile[ambientProfile > 0])
+
+  print(paste0("Calculating cell expression score for ", length(genelist), " genes"))
+  ctsScores = vector(mode = "numeric", length = nrow(cellExpression))
+  names(ctsScores) = rownames(cellExpression)
+
+  for(gene in genelist){
+    ctsScores[gene] = celltypeSpecificityScore(gene, cellExpression)
+  }
+
+  # loop over every threshold to test
+  # Starts at the highest value so
+  for(emptyDropletCutoff in seq(from = startPos, to = stopPos, by = byLength)){
+    ambientProfile = determine.background.to.remove(allExpression, cellExpression, emptyDropletCutoff, contaminationChanceCutoff)
+
+    print(paste0("Profiling at cutoff ", emptyDropletCutoff))
+
+    ambientScoreProfile = data.frame(ambientProfile, ctsScores)
+    #ambientScoreProfile = ambientScoreProfile[ambientScoreProfile$ctsScores > 0.85, ]
+    ambientScoreProfile$stillOverAmbient = 0
+    ambientScoreProfile$belowCellexpression = 0
+
+    genesToCheck = names(ambientProfile[ambientProfile > 0])
+    if(exists("overAmbientGenes")){
+      genesToCheck = overAmbientGenes
+    }
+
+    print(paste0("Calculating profiles for ", length(genesToCheck), " genes"))
+
+    for(gene in genesToCheck){
+      expThresh = getExpressionThreshold(gene, cellExpression, 0.95)
+
+      if(emptyDropletCutoff == startPos){
+        ambientScoreProfile[gene, "belowCellexpression"] = table(cellExpression[gene,] > 0  & cellExpression[gene,] < expThresh)["TRUE"]
+      }
+      ambientScoreProfile[gene, "stillOverAmbient"] =  table(cellExpression[gene,] > ambientScoreProfile[gene, "ambientProfile"]  & cellExpression[gene,] < expThresh)["TRUE"]
+    }
+
+    ambientScoreProfile[is.na(ambientScoreProfile)] = 0
+    ambientScoreProfile$contaminationChance = ambientScoreProfile$stillOverAmbient / ambientScoreProfile$belowCellexpression
+    ambientScoreProfile[is.na(ambientScoreProfile)] = 0
+
+    # Genes that have already been completely removed don't need to be checked at higher resolution
+    overAmbientGenes = rownames(ambientScoreProfile[ambientScoreProfile$stillOverAmbient > 0,])
+
+    ambientScoreProfile[genelist,"AmbientCorrection"]
+
+    ambientScoreProfileOverview[names(ctsScores), "ctsScores"] = ctsScores
+    if(emptyDropletCutoff == startPos){
+      ambientScoreProfileOverview[rownames(ambientScoreProfile), "belowCellexpression"] = ambientScoreProfile$belowCellexpression
+    }
+    ambientScoreProfileOverview[rownames(ambientScoreProfile), paste0("stillOverAmbient", as.character(emptyDropletCutoff))] = ambientScoreProfile$stillOverAmbient
+    ambientScoreProfileOverview[rownames(ambientScoreProfile), paste0("AmbientCorrection", as.character(emptyDropletCutoff))] = ambientScoreProfile$ambientProfile
+  }
+  ambientScoreProfileOverview = ambientScoreProfileOverview[!is.na(ambientScoreProfileOverview$ctsScores),]
+  ambientScoreProfileOverview[is.na(ambientScoreProfileOverview)] = 0
+
+  ambientScoreProfileOverview[,paste0("Threshold_", seq(from = startPos, to = stopPos, by = byLength))] = ambientScoreProfileOverview[,paste0("stillOverAmbient", as.character(seq(from = startPos, to = stopPos, by = byLength)))] / ambientScoreProfileOverview$belowCellexpression
+  ambientScoreProfileOverview[is.na(ambientScoreProfileOverview)] = 0
+
+  ambientScoreProfileOverview[,paste0("contaminationChance", as.character(seq(from = startPos, to = stopPos, by = byLength)))] = ambientScoreProfileOverview[,paste0("stillOverAmbient", as.character(seq(from = startPos, to = stopPos, by = byLength)))] / ambientScoreProfileOverview$belowCellexpression
+
+  return(ambientScoreProfileOverview)
+}
+
 
 ##############
 # Turns out that cellranger output looks different from WriteMM output and Read10X can't read the latter
@@ -123,14 +212,27 @@ describe.ambient.RNA.sequence = function(fullCellMatrix, start, stop, by, contam
   return(ambientDescriptions)
 }
 
+plot.correction.effect.chance = function(correctionProfile){
+  pheatmap(correctionProfile[correctionProfile[,3] > 0, colnames(correctionProfile)[grep("contaminationChance", colnames(correctionProfile))]],
+           cluster_cols = FALSE,
+           treeheight_row = 0,
+           main = "Chance of affecting DE analyses")
+}
+
+plot.correction.effect.removal = function(correctionProfile){
+  pheatmap(correctionProfile[(correctionProfile[,3] > 0) ,colnames(correctionProfile)[grep("AmbientCorrection", colnames(correctionProfile))]],
+           cluster_cols = FALSE, treeheight_row = 0,
+           main = "Counts removed from each cell")
+}
 
 
 plot.ambient.profile = function(ambientProfile){
   par(mfrow = c(3,1))
-  plot(as.numeric(rownames(ambientProfile)), ambientProfile[,1],
-       main = "Total number of empty droplets at cutoffs",
-       xlab = "empty droplet UMI cutoff",
-       ylab = "Number of empty droplets")
+  ggplot(ambientProfile, aes(x=wt, y=genesInBackground)) + geom_point()
+
+  genesInBackground  = vector(mode = "numeric", length = length(seq(start, stop, by)))
+  genesContaminating = vector(mode = "numeric", length = length(seq(start, stop, by)))
+  nEmptyDroplets     = vector(mode = "numeric", length = length(seq(start, stop, by)))
 
   plot(as.numeric(rownames(ambientProfile)), ambientProfile[,2],
        main = "Number of genes in ambient RNA",
