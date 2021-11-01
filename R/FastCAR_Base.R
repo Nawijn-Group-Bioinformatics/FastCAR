@@ -15,6 +15,7 @@ library(Seurat)
 library(qlcMatrix)
 library(pheatmap)
 library(ggplot2)
+library(gridExtra)
 
 ###############################################################################
 
@@ -188,14 +189,15 @@ describe.correction.effect = function (allExpression, cellExpression, startPos, 
 # }
 
 # describe the number of genes identified in the background
-# and the number of genes failing the contaminiation chance threshold
+# and the number of genes failing the contamination chance threshold
 #
 describe.ambient.RNA.sequence = function(fullCellMatrix, start, stop, by, contaminationChanceCutoff){
+  cutoffValue = seq(start, stop, by)
   genesInBackground  = vector(mode = "numeric", length = length(seq(start, stop, by)))
   genesContaminating = vector(mode = "numeric", length = length(seq(start, stop, by)))
   nEmptyDroplets     = vector(mode = "numeric", length = length(seq(start, stop, by)))
 
-  ambientDescriptions = data.frame(nEmptyDroplets, genesInBackground, genesContaminating)
+  ambientDescriptions = data.frame(nEmptyDroplets, genesInBackground, genesContaminating, cutoffValue)
   rownames(ambientDescriptions) = seq(start, stop, by)
   for(emptyCutoff in seq(start, stop, by)){
     nEmpty = table((Matrix::colSums(fullCellMatrix) < emptyCutoff) &(Matrix::colSums(fullCellMatrix) > 0))[2]
@@ -212,6 +214,7 @@ describe.ambient.RNA.sequence = function(fullCellMatrix, start, stop, by, contam
   return(ambientDescriptions)
 }
 
+
 plot.correction.effect.chance = function(correctionProfile){
   pheatmap(correctionProfile[correctionProfile[,3] > 0, colnames(correctionProfile)[grep("contaminationChance", colnames(correctionProfile))]],
            cluster_cols = FALSE,
@@ -227,22 +230,16 @@ plot.correction.effect.removal = function(correctionProfile){
 
 
 plot.ambient.profile = function(ambientProfile){
-  par(mfrow = c(3,1))
-  ggplot(ambientProfile, aes(x=wt, y=genesInBackground)) + geom_point()
 
-  genesInBackground  = vector(mode = "numeric", length = length(seq(start, stop, by)))
-  genesContaminating = vector(mode = "numeric", length = length(seq(start, stop, by)))
-  nEmptyDroplets     = vector(mode = "numeric", length = length(seq(start, stop, by)))
+  p1 = ggplot(ambientProfile, aes(x=cutoffValue, y=genesInBackground)) + geom_point()
 
-  plot(as.numeric(rownames(ambientProfile)), ambientProfile[,2],
-       main = "Number of genes in ambient RNA",
-       xlab = "empty droplet UMI cutoff",
-       ylab = "Genes in empty droplets")
 
-  plot(as.numeric(rownames(ambientProfile)), ambientProfile[,3],
-       main = "number of genes to correct",
-       xlab = "empty droplet UMI cutoff",
-       ylab = "Genes identified as contamination")
+  p2= ggplot(ambientProfile, aes(x=cutoffValue, y=genesContaminating)) + geom_point()
+
+  p3 = ggplot(ambientProfile, aes(x=cutoffValue, y=nEmptyDroplets)) + geom_point()
+
+  grid.arrange(p1, p2, p3, nrow = 3)
+
 }
 
 # I noticed that the number of genes removed tends to even out over time
