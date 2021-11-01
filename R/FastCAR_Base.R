@@ -216,14 +216,14 @@ describe.ambient.RNA.sequence = function(fullCellMatrix, start, stop, by, contam
 
 
 plot.correction.effect.chance = function(correctionProfile){
-  pheatmap(correctionProfile[correctionProfile[,3] > 0, colnames(correctionProfile)[grep("contaminationChance", colnames(correctionProfile))]],
+  pheatmap(correctionProfile[correctionProfile[,2] > 0, colnames(correctionProfile)[grep("contaminationChance", colnames(correctionProfile))]],
            cluster_cols = FALSE,
            treeheight_row = 0,
            main = "Chance of affecting DE analyses")
 }
 
 plot.correction.effect.removal = function(correctionProfile){
-  pheatmap(correctionProfile[(correctionProfile[,3] > 0) ,colnames(correctionProfile)[grep("AmbientCorrection", colnames(correctionProfile))]],
+  pheatmap(correctionProfile[(correctionProfile[,2] > 0) ,colnames(correctionProfile)[grep("AmbientCorrection", colnames(correctionProfile))]],
            cluster_cols = FALSE, treeheight_row = 0,
            main = "Counts removed from each cell")
 }
