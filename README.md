@@ -18,7 +18,9 @@ First load the library and dependencies.
 library(Matrix)
 library(Seurat)
 library(qlcMatrix)
-library(FastCAR)
+library(pheatmap)
+library(ggplot2)
+library(gridExtra)
 ```
 Specify the locations of the expression matrices
 
@@ -47,6 +49,31 @@ plot.ambient.profile(ambProfile)
 ![picture](Images/Example_profile.png)
 
 
+The actual effect on the chances of genes affecting your DE analyses can be determined and visualized with the following function
+
+``` 
+  
+  correctionEffectProfile = describe.correction.effect(allExpression, cellExpression, 50, 500, 10, 0.05)
+  
+  plot.correction.effect.chance(correctionEffectProfile)
+  
+```
+
+![picture](Images/DE_affect_chance.png)
+
+
+
+
+How many reads will be removed of these genes can be visualized from the same profile
+```
+
+  plot.correction.effect.removal(correctionEffectProfile)
+
+``` 
+
+![picture](Images/Counts_removed.png)
+
+
 Set the empty droplet cutoff and the contamination chance cutoff
 
 The empty droplet cutoff is the number of UMIs a droplet can contain at the most to be considered empty.
@@ -69,8 +96,8 @@ emptyDropletCutoff = recommend.empty.cutoff(ambProfile)
 
 
 ```
-emptyDropletCutoff        = 100 
-contaminationChanceCutoff = 0.05
+emptyDropletCutoff        = 150 
+contaminationChanceCutoff = 0.005
 ```
 
 Determine the ambient RNA profile and remove the ambient RNA from each cell
@@ -103,3 +130,11 @@ First fully working version of the R package
 Fixed function to write the corrected matrix to file.
 Added readout of which genes will be corrected for and how many reads will be removed per cell
 Added some input checks to functions
+
+### v0.2
+Fixed a bug that caused FastCAR to be incompatible with biobase libraries
+Added better profiling to determine the effect of different settings on the corrections
+Swapped base R plots for ggplot2 plots
+
+
+
