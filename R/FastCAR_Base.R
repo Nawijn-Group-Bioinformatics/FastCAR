@@ -102,7 +102,7 @@ describe.correction.effect = function (allExpression, cellExpression, startPos, 
   ambientScoreProfileOverview = data.frame(row.names = rownames(cellExpression))
 
   # do a quick first run to see which genes get corrected at the highest setting
-  ambientProfile = determine.background.to.remove(allExpression, cellExpression, contaminationChanceCutoff)
+  ambientProfile = determine.background.to.remove(allExpression, stopPos, contaminationChanceCutoff)
   genelist = names(ambientProfile[ambientProfile > 0])
 
   print(paste0("Calculating cell expression score for ", length(genelist), " genes"))
@@ -116,7 +116,7 @@ describe.correction.effect = function (allExpression, cellExpression, startPos, 
   # loop over every threshold to test
   # Starts at the highest value so
   for(emptyDropletCutoff in seq(from = startPos, to = stopPos, by = byLength)){
-    ambientProfile = determine.background.to.remove(allExpression, cellExpression, emptyDropletCutoff, contaminationChanceCutoff)
+    ambientProfile = determine.background.to.remove(allExpression, emptyDropletCutoff, contaminationChanceCutoff)
 
     print(paste0("Profiling at cutoff ", emptyDropletCutoff))
 
