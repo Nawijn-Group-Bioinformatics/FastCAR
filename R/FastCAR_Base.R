@@ -102,7 +102,7 @@ describe.correction.effect = function (allExpression, cellExpression, startPos, 
   ambientScoreProfileOverview = data.frame(row.names = rownames(cellExpression))
 
   # do a quick first run to see which genes get corrected at the highest setting
-  ambientProfile = determine.background.to.remove(allExpression, cellExpression, stopPos, contaminationChanceCutoff)
+  ambientProfile = determine.background.to.remove(allExpression, cellExpression, contaminationChanceCutoff)
   genelist = names(ambientProfile[ambientProfile > 0])
 
   print(paste0("Calculating cell expression score for ", length(genelist), " genes"))
