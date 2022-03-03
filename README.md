@@ -24,6 +24,25 @@ library(gridExtra)
 library(stringr)
 ```
 
+We will use public 10X PBMC data as an examples
+
+```
+tmpDir = tempdir(check = TRUE)
+download.file("https://cf.10xgenomics.com/samples/cell-exp/2.1.0/pbmc4k/pbmc4k_raw_gene_bc_matrices.tar.gz", 
+              destfile = file.path(tmpDir, "tod.tar.gz"))
+download.file("https://cf.10xgenomics.com/samples/cell-exp/2.1.0/pbmc4k/pbmc4k_filtered_gene_bc_matrices.tar.gz", 
+              destfile = file.path(tmpDir, "toc.tar.gz"))
+untar(file.path(tmpDir, "tod.tar.gz"), exdir = tmpDir)
+untar(file.path(tmpDir, "toc.tar.gz"), exdir = tmpDir)
+
+
+
+cellMatrixLocation = paste0(tmpDir,"/filtered_gene_bc_matrices/GRCh38")
+fullMatrixLocation = paste0(tmpDir,"/raw_gene_bc_matrices/GRCh38")
+
+
+```
+
 Load both the cell matrix and the full matrix using Seurat 
 
 ```
@@ -56,7 +75,7 @@ The actual effect on the chances of genes affecting your DE analyses can be dete
   
 ```
 
-![picture](Images/DE_affect_chance.png)
+![picture](Images/DE_chance.png)
 
 
 
