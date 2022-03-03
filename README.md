@@ -54,7 +54,7 @@ These are optional as they do take a few minutes and the default settings work f
 Plotting the number of empty droplets, the number of genes identified in the ambient RNA, and the number of genes that will be corrected for at different UMI cutoffs,
 
 ```
-ambProfile = describe.ambient.RNA.sequence(fullCellMatrix = fullMatrix, 
+ambProfile = describe.ambient.RNA.sequence(fullMatrix = fullMatrix, 
                                            start = 10, 
                                            stop = 500, 
                                            by = 10, 
@@ -113,7 +113,7 @@ emptyDropletCutoff = recommend.empty.cutoff(ambProfile)
 
 ```
 emptyDropletCutoff        = 150 
-contaminationChanceCutoff = 0.005
+contaminationChanceCutoff = 0.05
 ```
 
 Determine the ambient RNA profile and remove the ambient RNA from each cell
