@@ -21,17 +21,14 @@ library(qlcMatrix)
 library(pheatmap)
 library(ggplot2)
 library(gridExtra)
+library(stringr)
 ```
-Specify the locations of the expression matrices
+
+Load both the cell matrix and the full matrix using Seurat 
 
 ```
-cellExpressionFolder  = c("Cellranger_output/sample1/filtered_feature_bc_matrix/")
-fullMatrixFolder      = c("Cellranger_output/sample1/raw_feature_bc_matrix/")
-```
-Load both the cell matrix and the full matrix
-```
-cellMatrix     = read.cell.matrix(cellExpressionFolder)
-fullMatrix     = read.full.matrix(fullMatrixFolder)
+cellMatrix     = Read10X(cellExpressionFolder)
+fullMatrix     = Read10X(fullMatrixFolder)
 ```
 The following functions give an idea of the effect that different settings have on the ambient RNA profile. 
 These are optional as they do take a few minutes and the default settings work fine
@@ -46,14 +43,14 @@ ambProfile = describe.ambient.RNA.sequence(fullCellMatrix = fullMatrix,
                                            
 plot.ambient.profile(ambProfile)
 ``` 
-![picture](Images/Example_profile.png)
+![picture](Images/example_profile_2.png)
 
 
 The actual effect on the chances of genes affecting your DE analyses can be determined and visualized with the following function
 
 ``` 
   
-  correctionEffectProfile = describe.correction.effect(allExpression, cellExpression, 50, 500, 10, 0.05)
+  correctionEffectProfile = describe.correction.effect(fullMatrix, cellMatrix, 50, 250, 25, 0.05)
   
   plot.correction.effect.chance(correctionEffectProfile)
   
@@ -102,7 +99,7 @@ contaminationChanceCutoff = 0.005
 
 Determine the ambient RNA profile and remove the ambient RNA from each cell
 ```
-ambientProfile = determine.background.to.remove(fullMatrix, cellMatrix, emptyDropletCutoff, contaminationChanceCutoff)
+ambientProfile = determine.background.to.remove(fullMatrix, emptyDropletCutoff, contaminationChanceCutoff)
 cellMatrix     = remove.background(cellMatrix, ambientProfile)
 ```
 

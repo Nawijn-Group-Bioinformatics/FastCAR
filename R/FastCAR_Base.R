@@ -16,19 +16,20 @@ library(qlcMatrix)
 library(pheatmap)
 library(ggplot2)
 library(gridExtra)
+library(stringr)
 
 ###############################################################################
-
 # had to make this function to efficiently modify sparse matrices on a per gene basis
 # A dgCMatrix object has the following elements that matter for this function
 # i: a sequence of the row locations of each non-zero element
 # x: the non-zero values in the matrix
 # p: the where in 'i' and 'x' a new column starts
 # Dimnames: The names of the rows and columns
-remove.background = function(geneCellMatrix, ambientRNAprofile){
+
+remove.background = function(cellMatrix, ambientRNAprofile){
   # do some input checks first
-  if(!("dgCMatrix" %in% class(geneCellMatrix))){
-    cat("geneCellMatrix should be a sparse matrix of the \"dgCMatrix\" class")
+  if(!("dgCMatrix" %in% class(cellMatrix))){
+    cat("cellMatrix should be a sparse matrix of the \"dgCMatrix\" class")
     stop()
   }
 
@@ -36,53 +37,48 @@ remove.background = function(geneCellMatrix, ambientRNAprofile){
   # Here is the actual functionality
   for(gene in names(ambientRNAprofile[ambientRNAprofile > 0])){
     # Determine the locations where the gene is not zero, therefore referenced in i
-    iLocs = which(geneCellMatrix@Dimnames[[1]] == gene)
+    iLocs = which(cellMatrix@Dimnames[[1]] == gene)
     # Determine the location of the actual values,
-    xLocs = which(geneCellMatrix@i == iLocs-1) # -1 because of 0 and 1 based counting systems
+    xLocs = which(cellMatrix@i == iLocs-1) # -1 because of 0 and 1 based counting systems
     # Remove the contaminating RNA
-    geneCellMatrix@x[xLocs] = geneCellMatrix@x[xLocs] - ambientRNAprofile[gene]
+    cellMatrix@x[xLocs] = cellMatrix@x[xLocs] - ambientRNAprofile[gene]
   }
   # correct for instances where the expression was corrected to below zero
-  geneCellMatrix@x[geneCellMatrix@x < 0] = 0
+  cellMatrix@x[cellMatrix@x < 0] = 0
   # remove the zeroes and return the corrected matrix
-  return(drop0(geneCellMatrix, is.Csparse = TRUE))
+  return(drop0(cellMatrix, is.Csparse = TRUE))
 }
-##############
 
-determine.background.to.remove = function(fullCellMatrix, emptyDropletCutoff, contaminationChanceCutoff){
+###############################################################################
+# maintanance notes:
+# making a subset of the fullMatrix is slower than doing it like this
+determine.background.to.remove = function(fullMatrix, emptyDropletCutoff, contaminationChanceCutoff){
+
+  ambientColumns = Matrix::colSums(fullMatrix) < emptyDropletCutoff
 
   # determines the highest expression value found for every gene in the droplets that we're sure don't contain cells
-  backGroundMax   = as.vector(qlcMatrix::rowMax(fullCellMatrix[,Matrix::colSums(fullCellMatrix) < emptyDropletCutoff]))
-  names(backGroundMax) = rownames(fullCellMatrix)
+  backGroundMax   = rep(0, nrow(fullMatrix))
+  names(backGroundMax) = rownames(fullMatrix)
 
   # droplets that are empty but not unused barcodes, unused barcodes have zero reads assigned to them.
-  nEmpty = table((Matrix::colSums(fullCellMatrix) < emptyDropletCutoff) &(Matrix::colSums(fullCellMatrix) > 0))[2]
+  nEmpty = table((ambientColumns) &(Matrix::colSums(fullMatrix) > 0))[2]
   # rowSum on a logical statement returns the number of TRUE occurences
-  occurences = Matrix::rowSums(fullCellMatrix[,Matrix::colSums(fullCellMatrix) < emptyDropletCutoff] !=0)
+  occurences = Matrix::rowSums(fullMatrix[,ambientColumns] !=0)
 
   #probability of a background read of a gene ending up in a cell
   probabiltyCellContaminationPerGene = occurences / nEmpty
 
-  # if the probablity of a gene contaminating a cell is too low we set the value to zero so it doesn't get corrected
-  backGroundMax[probabiltyCellContaminationPerGene < contaminationChanceCutoff] = 0
+  # a for loop here is faster if you're only looking at a few dozen genes but that's not really worth the effort
+  backGroundMax[probabiltyCellContaminationPerGene >= contaminationChanceCutoff] =
+    as.vector(qlcMatrix::rowMax(fullMatrix[probabiltyCellContaminationPerGene >= contaminationChanceCutoff,
+                                               ambientColumns]))
+
   return(backGroundMax)
 }
 
-##############
-
-read.cell.matrix = function(cellFolderLocation){
-  cellMatrix = Read10X(cellFolderLocation)
-  return(cellMatrix)
-}
-
-##############
-
-read.full.matrix = function(fullFolderLocation){
-  fullMatrix = Read10X(fullFolderLocation)
-  return(fullMatrix)
-}
 
 ###############################################################################
+# This gives the level of expression of the first library that probably isn't a cell
 getExpressionThreshold = function(gene, expMat, percentile){
   orderedExpression = expMat[gene, order(expMat[gene,], decreasing = TRUE)]
   CS = cumsum(orderedExpression)
@@ -90,33 +86,63 @@ getExpressionThreshold = function(gene, expMat, percentile){
 }
 
 ###############################################################################
+# gives a score between 0.5 - 1.0 to designate how specific the gene expression
+# seems be for a subset of cells
+# higher means expression is mostly concentrated in a few cells
 celltypeSpecificityScore = function(gene, expMat){
   CS = cumsum(expMat[gene, order(expMat[gene,], decreasing = TRUE)])
   return((sum(CS/max(CS))/ncol(expMat))  )
 }
 
 ###############################################################################
-describe.correction.effect = function (allExpression, cellExpression, startPos, stopPos, byLength, contaminationChanceCutoff){
+describe.correction.effect = function (fullMatrix, cellMatrix, startPos, stopPos, byLength, contaminationChanceCutoff){
+  # Do some checks to see if it won't crash
+  # start needs to be lower than stop
+  if(startPos >= stopPos | !(typeof(startPos) == "double")){
+    cat("The starting threshold needs to be a number smaller than the stopping threshold\n")
+    stop()
+  }
+
+  # the "by" length needs to be smaller than stop
+  if(byLength >= stopPos | !(typeof(byLength) == "double") | !(typeof(stopPos) == "double")){
+    cat("The step size needs be smaller than the stopping threshold\n")
+    stop()
+  }
+
+  # The expression matrices need to actually exist and match
+  if(ncol(fullMatrix == 0) | nrow(fullMatrix == 0)){
+    cat("The raw matrix seems to be incomplete\n")
+    stop()
+  }
+
+  if(ncol(cellMatrix == 0) | nrow(cellMatrix == 0)){
+    cat("The cell matrix seems to be incomplete\n")
+    stop()
+  }
+
+  if(!(rownames(fullMatrix) == rownames(cellMatrix))){
+    cat("the two matrices don't contain the same genes\n")
+    stop()
+  }
 
   # Make somewhere to store all the data that needs to be returned to the user
-  ambientScoreProfileOverview = data.frame(row.names = rownames(cellExpression))
+  ambientScoreProfileOverview = data.frame(row.names = rownames(cellMatrix))
 
   # do a quick first run to see which genes get corrected at the highest setting
-  ambientProfile = determine.background.to.remove(allExpression, stopPos, contaminationChanceCutoff)
+  ambientProfile = determine.background.to.remove(fullMatrix, stopPos, contaminationChanceCutoff)
   genelist = names(ambientProfile[ambientProfile > 0])
 
   print(paste0("Calculating cell expression score for ", length(genelist), " genes"))
-  ctsScores = vector(mode = "numeric", length = nrow(cellExpression))
-  names(ctsScores) = rownames(cellExpression)
+  ctsScores = vector(mode = "numeric", length = nrow(cellMatrix))
+  names(ctsScores) = rownames(cellMatrix)
 
   for(gene in genelist){
-    ctsScores[gene] = celltypeSpecificityScore(gene, cellExpression)
+    ctsScores[gene] = celltypeSpecificityScore(gene, cellMatrix)
   }
 
   # loop over every threshold to test
-  # Starts at the highest value so
   for(emptyDropletCutoff in seq(from = startPos, to = stopPos, by = byLength)){
-    ambientProfile = determine.background.to.remove(allExpression, emptyDropletCutoff, contaminationChanceCutoff)
+    ambientProfile = determine.background.to.remove(fullMatrix, emptyDropletCutoff, contaminationChanceCutoff)
 
     print(paste0("Profiling at cutoff ", emptyDropletCutoff))
 
@@ -191,7 +217,7 @@ describe.correction.effect = function (allExpression, cellExpression, startPos, 
 # describe the number of genes identified in the background
 # and the number of genes failing the contamination chance threshold
 #
-describe.ambient.RNA.sequence = function(fullCellMatrix, start, stop, by, contaminationChanceCutoff){
+describe.ambient.RNA.sequence = function(fullMatrix, start, stop, by, contaminationChanceCutoff){
   cutoffValue = seq(start, stop, by)
   genesInBackground  = vector(mode = "numeric", length = length(seq(start, stop, by)))
   genesContaminating = vector(mode = "numeric", length = length(seq(start, stop, by)))
@@ -200,9 +226,9 @@ describe.ambient.RNA.sequence = function(fullCellMatrix, start, stop, by, contam
   ambientDescriptions = data.frame(nEmptyDroplets, genesInBackground, genesContaminating, cutoffValue)
   rownames(ambientDescriptions) = seq(start, stop, by)
   for(emptyCutoff in seq(start, stop, by)){
-    nEmpty = table((Matrix::colSums(fullCellMatrix) < emptyCutoff) &(Matrix::colSums(fullCellMatrix) > 0))[2]
+    nEmpty = table((Matrix::colSums(fullMatrix) < emptyCutoff) &(Matrix::colSums(fullMatrix) > 0))[2]
 
-    occurences = Matrix::rowSums(fullCellMatrix[,Matrix::colSums(fullCellMatrix) < emptyCutoff] !=0)
+    occurences = Matrix::rowSums(fullMatrix[,Matrix::colSums(fullMatrix) < emptyCutoff] !=0)
 
     #probability of a background read of a gene ending up in a cell
     probabiltyCellContaminationPerGene = occurences / nEmpty
@@ -216,14 +242,30 @@ describe.ambient.RNA.sequence = function(fullCellMatrix, start, stop, by, contam
 
 
 plot.correction.effect.chance = function(correctionProfile){
-  pheatmap(correctionProfile[correctionProfile[,2] > 0, colnames(correctionProfile)[grep("contaminationChance", colnames(correctionProfile))]],
+  # subset the parts of of the correction effect profile that describe the contamination chance
+  effectSubset = correctionProfile[correctionProfile[,2] > 0, colnames(correctionProfile)[grep("contaminationChance", colnames(correctionProfile))]]
+
+  # change the column names
+  colnames(effectSubset) = str_replace(string = colnames(effectSubset),
+                                       pattern = "contaminationChance",
+                                       replacement = "cutoff ")
+  # Make a plot
+  pheatmap(effectSubset,
            cluster_cols = FALSE,
            treeheight_row = 0,
            main = "Chance of affecting DE analyses")
 }
 
 plot.correction.effect.removal = function(correctionProfile){
-  pheatmap(correctionProfile[(correctionProfile[,2] > 0) ,colnames(correctionProfile)[grep("AmbientCorrection", colnames(correctionProfile))]],
+  # subset the parts of of the correction effect profile that describe the contamination chance
+  effectSubset = correctionProfile[correctionProfile[,2] > 0, colnames(correctionProfile)[grep("AmbientCorrection", colnames(correctionProfile))]]
+
+  # change the column names
+  colnames(effectSubset) = str_replace(string = colnames(effectSubset),
+                                       pattern = "AmbientCorrection",
+                                       replacement = "cutoff ")
+  # Make a plot
+  pheatmap(effectSubset,
            cluster_cols = FALSE, treeheight_row = 0,
            main = "Counts removed from each cell")
 }
@@ -232,10 +274,7 @@ plot.correction.effect.removal = function(correctionProfile){
 plot.ambient.profile = function(ambientProfile){
 
   p1 = ggplot(ambientProfile, aes(x=cutoffValue, y=genesInBackground)) + geom_point()
-
-
-  p2= ggplot(ambientProfile, aes(x=cutoffValue, y=genesContaminating)) + geom_point()
-
+  p2 = ggplot(ambientProfile, aes(x=cutoffValue, y=genesContaminating)) + geom_point()
   p3 = ggplot(ambientProfile, aes(x=cutoffValue, y=nEmptyDroplets)) + geom_point()
 
   grid.arrange(p1, p2, p3, nrow = 3)
