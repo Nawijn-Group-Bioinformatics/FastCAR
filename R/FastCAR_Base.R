@@ -110,12 +110,12 @@ describe.correction.effect = function (fullMatrix, cellMatrix, startPos, stopPos
   }
 
   # The expression matrices need to actually exist and match
-  if(ncol(fullMatrix == 0) | nrow(fullMatrix == 0)){
+  if(ncol(fullMatrix) == 0 | nrow(fullMatrix) == 0){
     cat("The raw matrix seems to be incomplete\n")
     stop()
   }
 
-  if(ncol(cellMatrix == 0) | nrow(cellMatrix == 0)){
+  if(ncol(cellMatrix) == 0 | nrow(cellMatrix) == 0){
     cat("The cell matrix seems to be incomplete\n")
     stop()
   }
@@ -162,9 +162,9 @@ describe.correction.effect = function (fullMatrix, cellMatrix, startPos, stopPos
       expThresh = getExpressionThreshold(gene, cellExpression, 0.95)
 
       if(emptyDropletCutoff == startPos){
-        ambientScoreProfile[gene, "belowCellexpression"] = table(cellExpression[gene,] > 0  & cellExpression[gene,] < expThresh)["TRUE"]
+        ambientScoreProfile[gene, "belowCellexpression"] = table(cellMatrix[gene,] > 0  & cellMatrix[gene,] < expThresh)["TRUE"]
       }
-      ambientScoreProfile[gene, "stillOverAmbient"] =  table(cellExpression[gene,] > ambientScoreProfile[gene, "ambientProfile"]  & cellExpression[gene,] < expThresh)["TRUE"]
+      ambientScoreProfile[gene, "stillOverAmbient"] =  table(cellMatrix[gene,] > ambientScoreProfile[gene, "ambientProfile"]  & cellMatrix[gene,] < expThresh)["TRUE"]
     }
 
     ambientScoreProfile[is.na(ambientScoreProfile)] = 0
