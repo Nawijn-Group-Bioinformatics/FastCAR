@@ -46,8 +46,8 @@ fullMatrixLocation = paste0(tmpDir,"/raw_gene_bc_matrices/GRCh38")
 Load both the cell matrix and the full matrix using Seurat 
 
 ```
-cellMatrix     = Read10X(cellExpressionFolder)
-fullMatrix     = Read10X(fullMatrixFolder)
+cellMatrix     = Read10X(cellMatrixLocation)
+fullMatrix     = Read10X(fullMatrixLocation)
 ```
 The following functions give an idea of the effect that different settings have on the ambient RNA profile. 
 These are optional as they do take a few minutes and the default settings work fine
