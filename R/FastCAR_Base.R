@@ -120,7 +120,7 @@ describe.correction.effect = function (fullMatrix, cellMatrix, startPos, stopPos
     stop()
   }
 
-  if(!(rownames(fullMatrix) == rownames(cellMatrix))){
+  if(!(identical(rownames(fullMatrix), rownames(cellMatrix)))){
     cat("the two matrices don't contain the same genes\n")
     stop()
   }
@@ -159,7 +159,7 @@ describe.correction.effect = function (fullMatrix, cellMatrix, startPos, stopPos
     print(paste0("Calculating profiles for ", length(genesToCheck), " genes"))
 
     for(gene in genesToCheck){
-      expThresh = getExpressionThreshold(gene, cellExpression, 0.95)
+      expThresh = getExpressionThreshold(gene, cellMatrix, 0.95)
 
       if(emptyDropletCutoff == startPos){
         ambientScoreProfile[gene, "belowCellexpression"] = table(cellMatrix[gene,] > 0  & cellMatrix[gene,] < expThresh)["TRUE"]
